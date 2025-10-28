@@ -8,6 +8,11 @@ from google.auth.transport import requests as google_requests
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
+from .models import Product
+from .models import CartItem
+from rest_framework.permissions import AllowAny
+
+
 
 
 User = get_user_model()
@@ -80,10 +85,53 @@ class PerfilAPI(APIView):
         })
 
 
+class ProductListAPI(APIView):
+    permission_classes = [AllowAny] 
+    def get(self, request):
+        qs = Product.objects.all().order_by('name')
+        serializer = ProductSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class CartItemListAPI(APIView):
+    permission_classes = [AllowAny] 
+    def post(self, request, user):
+        user_id = request.data.get('user')
+        product_id = request.data.get('product')
+        quantity = request.data.get('quantity', 1)
 
+        if not user_id or not product_id:
+            return Response({'error': 'user y product son obligatorios'}, status=status.HTTP_400_BAD_REQUEST)
 
+        try:
+            user = User.objects.get(id=user_id)
+            product = Product.objects.get(id=product_id)
+        except User.DoesNotExist:
+            return Response({'error': 'Usuario no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        except Product.DoesNotExist:
+            return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        cart_item, created = CartItem.objects.get_or_create(
+            user=user,
+            product=product,
+            defaults={'quantity': quantity}
+        )
+
+        
+        if not created:
+            cart_item.quantity += int(quantity)
+            cart_item.save()
+
+        
+        return Response({
+            'user': user.id,
+            'product': product.name,
+            'quantity': cart_item.quantity,
+            'added_at': cart_item.added_at,  # aquí mostramos cuándo se añadió
+            'message': 'Item añadido al carrito'
+        }, status=status.HTTP_201_CREATED)
+
+#PRUEBAS
 class HelloAPI(APIView):
     def get(self, request):
         return Response({'message': '¡Hola, esto es la API de la tienda!'}, status=status.HTTP_200_OK)
