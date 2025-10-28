@@ -6,13 +6,9 @@ from rest_framework import status
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.permissions import AllowAny
-from rest_framework.permissions import IsAuthenticated
-from .models import Product
-from .models import CartItem
-from rest_framework.permissions import AllowAny
-
-
+from rest_framework.permissions import AllowAny,IsAuthenticated
+from .models import Product,CartItem
+from .serializers import  CartItemSerializer, ProductSerializer
 
 
 User = get_user_model()
@@ -70,7 +66,7 @@ class InicioSesion(APIView):
             return Response({'error': 'Token inválido', 'details': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'error': 'Error en el servidor', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+
 
 class PerfilAPI(APIView):
     permission_classes = [IsAuthenticated]
@@ -87,49 +83,62 @@ class PerfilAPI(APIView):
 
 class ProductListAPI(APIView):
     permission_classes = [AllowAny] 
+
     def get(self, request):
         qs = Product.objects.all().order_by('name')
         serializer = ProductSerializer(qs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class CartItemListAPI(APIView):
-    permission_classes = [AllowAny] 
-    def post(self, request, user):
-        user_id = request.data.get('user')
-        product_id = request.data.get('product')
-        quantity = request.data.get('quantity', 1)
+class CartItemListCreateAPI(APIView):
+    permission_classes = [IsAuthenticated]
 
-        if not user_id or not product_id:
-            return Response({'error': 'user y product son obligatorios'}, status=status.HTTP_400_BAD_REQUEST)
+    def get(self, request):
+        cart_items = CartItem.objects.filter(user=request.user)
+        serializer = CartItemSerializer(cart_items, many=True)
+        return Response(serializer.data)
 
+    def post(self, request):
+        serializer = CartItemSerializer(data=request.data)
+        if serializer.is_valid():
+            product = serializer.validated_data['product']
+            quantity = serializer.validated_data['quantity']
+
+            # Ver si ya existe en el carrito
+            cart_item, created = CartItem.objects.get_or_create(
+                user=request.user, product=product,
+                defaults={'quantity': quantity}
+            )
+
+            if not created:
+                cart_item.quantity += quantity
+                cart_item.save()
+
+            return Response(CartItemSerializer(cart_item).data, status=201)
+        return Response(serializer.errors, status=400)
+
+
+class CartItemDetailAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
         try:
-            user = User.objects.get(id=user_id)
-            product = Product.objects.get(id=product_id)
-        except User.DoesNotExist:
-            return Response({'error': 'Usuario no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-        except Product.DoesNotExist:
-            return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            item = CartItem.objects.get(id=pk, user=request.user)
+        except CartItem.DoesNotExist:
+            return Response({'error': 'Item no encontrado'}, status=404)
 
-        cart_item, created = CartItem.objects.get_or_create(
-            user=user,
-            product=product,
-            defaults={'quantity': quantity}
-        )
+        n = request.query_params.get('n')
+        if n is not None:
+            n = int(n)
 
-        
-        if not created:
-            cart_item.quantity += int(quantity)
-            cart_item.save()
+        if n is None or item.quantity <= n:
+            item.delete()
+        else:
+            item.quantity -= n
+            item.save()
 
-        
-        return Response({
-            'user': user.id,
-            'product': product.name,
-            'quantity': cart_item.quantity,
-            'added_at': cart_item.added_at,  # aquí mostramos cuándo se añadió
-            'message': 'Item añadido al carrito'
-        }, status=status.HTTP_201_CREATED)
+        return Response(status=204)
+
 
 #PRUEBAS
 class HelloAPI(APIView):

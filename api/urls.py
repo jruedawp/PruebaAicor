@@ -1,9 +1,5 @@
 from django.urls import path
-from .views import HelloAPI
-from .views import Prueba
-from .views import InicioSesion
-from .views import PerfilAPI
-from .views import ProductListAPI
+from .views import HelloAPI, PerfilAPI, Prueba, InicioSesion, ProductListAPI, CartItemListCreateAPI, CartItemDetailAPI
 from rest_framework_simplejwt.views import (TokenObtainPairView,TokenRefreshView)
 from .views_auth import RegisterView
 urlpatterns = [
@@ -14,5 +10,7 @@ urlpatterns = [
     path('productos/', ProductListAPI.as_view(), name='productos_list'),
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('register/', RegisterView.as_view(), name='register')
-]
+    path('register/', RegisterView.as_view(), name='register'),
+    path('cart/', CartItemListCreateAPI.as_view(), name='cart_list_create'),
+    path('cart/<int:pk>/', CartItemDetailAPI.as_view(), name='cart_detail'),
+    ]
