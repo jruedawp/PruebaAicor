@@ -7,10 +7,11 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny,IsAuthenticated
-from .models import Product,CartItem
-from .serializers import  CartItemSerializer, ProductSerializer
+from .models import Product,CartItem, Order, OrderItem
+from .serializers import  CartItemSerializer, ProductSerializer, OrderSerializer
 
 
+#INICIO DE SESION GOOGLE
 User = get_user_model()
 
 class InicioSesion(APIView):
@@ -67,7 +68,7 @@ class InicioSesion(APIView):
         except Exception as e:
             return Response({'error': 'Error en el servidor', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
+#GET EL PERFIL GOOGLE
 class PerfilAPI(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -80,7 +81,7 @@ class PerfilAPI(APIView):
             'last_name': user.last_name
         })
 
-
+#LISTA DE PRODUCTOS
 class ProductListAPI(APIView):
     permission_classes = [AllowAny] 
 
@@ -89,72 +90,113 @@ class ProductListAPI(APIView):
         serializer = ProductSerializer(qs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
-class CartItemListCreateAPI(APIView):
+#CARRITO
+class CartAPI(APIView):
     permission_classes = [IsAuthenticated]
+    
+    #Obtener articulos del carrito
+    def get(self, request, pk=None):
+        if pk:
+            try:
+                item = CartItem.objects.get(id=pk, user=request.user)
+                return Response(CartItemSerializer(item).data)
+            except CartItem.DoesNotExist:
+                return Response({'error': 'No encontrado'}, status=404)
+        else:
+            items = CartItem.objects.filter(user=request.user)
+            return Response(CartItemSerializer(items, many=True).data)
 
-    def get(self, request):
-        cart_items = CartItem.objects.filter(user=request.user)
-        serializer = CartItemSerializer(cart_items, many=True)
-        return Response(serializer.data)
-
+     #Añadir articulo al carrito
     def post(self, request):
         serializer = CartItemSerializer(data=request.data)
         if serializer.is_valid():
             product = serializer.validated_data['product']
             quantity = serializer.validated_data['quantity']
-
-            # Ver si ya existe en el carrito
-            cart_item, created = CartItem.objects.get_or_create(
+            item, created = CartItem.objects.get_or_create(
                 user=request.user, product=product,
                 defaults={'quantity': quantity}
             )
-
             if not created:
-                cart_item.quantity += quantity
-                cart_item.save()
-
-            return Response(CartItemSerializer(cart_item).data, status=201)
+                item.quantity += quantity
+                item.save()
+            return Response(CartItemSerializer(item).data, status=201)
         return Response(serializer.errors, status=400)
 
-
-class CartItemDetailAPI(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def delete(self, request, pk):
+    #Borrar articulo del carrito
+    def delete(self, request, pk=None):
+        if not pk:
+            return Response({'error': 'Debes indicar el ID del item'}, status=400)
         try:
             item = CartItem.objects.get(id=pk, user=request.user)
         except CartItem.DoesNotExist:
             return Response({'error': 'Item no encontrado'}, status=404)
 
         n = request.query_params.get('n')
-        if n is not None:
+        if n:
             n = int(n)
-
-        if n is None or item.quantity <= n:
-            item.delete()
-        else:
-            item.quantity -= n
-            item.save()
-
+            if item.quantity > n:
+                item.quantity -= n
+                item.save()
+                return Response(status=204)
+        item.delete()
         return Response(status=204)
 
 
-#PRUEBAS
-class HelloAPI(APIView):
-    def get(self, request):
-        return Response({'message': '¡Hola, esto es la API de la tienda!'}, status=status.HTTP_200_OK)
+#PEDIDOS
+class OrderAPI(APIView):
+    permission_classes = [IsAuthenticated]
 
-class Prueba(APIView):
-    def get(self, request, p1 = None, p2 = None):
-        p1 = request.query_params.get('p1')
-        p2 = request.query_params.get('p2')
+    #Devuelve pedidos
+    def get(self, request, pk=None):
+        if pk:
+            try:
+                order = Order.objects.get(id=pk, user=request.user)
+            except Order.DoesNotExist:
+                return Response({'error': 'Pedido no encontrado'}, status=404)
+            serializer = OrderSerializer(order)
+            return Response(serializer.data, status=200)
+        else:
+            orders = Order.objects.filter(user=request.user).order_by('-created_at')
+            serializer = OrderSerializer(orders, many=True)
+            return Response(serializer.data, status=200)
         
-        if p1 and p2:
-            return Response(1)
-        if p1:
-            return Response(2)
-        if p2:
-            return Response(3)
+    #Crear un nuevo pedido
+    def post(self, request):
+        user = request.user
+        cart_items = CartItem.objects.filter(user=user)
+
+        if not cart_items.exists():
+            return Response({'error': 'El carrito está vacío'}, status=400)
+
+        total = sum(item.product.price * item.quantity for item in cart_items)
+        order = Order.objects.create(user=user, total=total)
+
+        for item in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                product=item.product,
+                quantity=item.quantity,
+                price=item.product.price,
+                subtotal=item.product.price * item.quantity
+            )
+
+        cart_items.delete()
+
+        return Response(OrderSerializer(order).data, status=201)
+    
+    #Cambiar estado del pedido
+    def patch(self, request, pk):
+        try:
+            order = Order.objects.get(id=pk, user=request.user)
+        except Order.DoesNotExist:
+            return Response({'error': 'Pedido no encontrado'}, status=404)
         
-        return Response(4)
+        new_status = request.data.get('status')
+        if new_status not in ['pendiente', 'aceptado', 'cancelado', 'enviado']:
+            return Response({'error': 'Estado no válido'}, status=400)
+        
+        order.status = new_status
+        order.save()
+        return Response(OrderSerializer(order).data, status=200)
+
+
