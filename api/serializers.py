@@ -28,8 +28,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    items = OrderItemSerializer(many=True, read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Order
-        fields = ['id', 'user', 'total', 'status', 'created_at', 'items']
+        fields = ['id', 'created_at', 'total', 'status', 'status_display']

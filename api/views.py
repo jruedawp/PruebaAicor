@@ -19,15 +19,17 @@ class InicioSesion(APIView):
 
     def post(self, request):
         id_token_str = request.data.get('id_token')
+        print("id_token_str:", id_token_str[:30], "...")
 
         if not id_token_str:
             return Response({'error': 'id_token es requerido'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID') #Obtenemos el CLIENT_ID de las variables de entorno
+            CLIENT_ID = '991994938035-qj9jdkvoa892ss2jc300m01m25e75tn2.apps.googleusercontent.com' #Obtenemos el CLIENT_ID de las variables de entorno
             print("CLIENT_ID:", CLIENT_ID)
             idinfo = id_token.verify_oauth2_token(id_token_str, google_requests.Request(), CLIENT_ID) #conectamos con googlecloud
-
+            print("idinfo:", idinfo) 
+                  
             #Si el correo no está verificado lanzamos error
             if idinfo.get('email_verified') is not True: 
                 return Response({'error': 'El email no está verificado por Google'}, status=status.HTTP_400_BAD_REQUEST)
@@ -63,6 +65,7 @@ class InicioSesion(APIView):
             }, status=status.HTTP_200_OK)
 
         except ValueError as e:
+            print("ValueError en verify_oauth2_token:", str(e))
             # token inválido
             return Response({'error': 'Token inválido', 'details': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -85,16 +88,22 @@ class PerfilAPI(APIView):
 class ProductListAPI(APIView):
     permission_classes = [AllowAny] 
 
-    def get(self, request):
-        qs = Product.objects.all().order_by('name')
-        serializer = ProductSerializer(qs, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def get(self, request, pk=None):
+        if pk:
+            try:
+                item = Product.objects.get(id=pk)
+                return Response(ProductSerializer(item).data)
+            except Product.DoesNotExist:
+                return Response({'error': 'No encontrado'}, status=404)
+        else:
+            qs = Product.objects.all().order_by('name')
+            serializer = ProductSerializer(qs, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-#CARRITO
 class CartAPI(APIView):
     permission_classes = [IsAuthenticated]
-    
-    #Obtener articulos del carrito
+
+    # Obtener artículos del carrito
     def get(self, request, pk=None):
         if pk:
             try:
@@ -106,23 +115,35 @@ class CartAPI(APIView):
             items = CartItem.objects.filter(user=request.user)
             return Response(CartItemSerializer(items, many=True).data)
 
-     #Añadir articulo al carrito
+    # Añadir artículo al carrito
     def post(self, request):
         serializer = CartItemSerializer(data=request.data)
         if serializer.is_valid():
             product = serializer.validated_data['product']
             quantity = serializer.validated_data['quantity']
+
+            if product.stock < quantity:
+                return Response({'error': 'Stock insuficiente'}, status=400)
+
             item, created = CartItem.objects.get_or_create(
                 user=request.user, product=product,
                 defaults={'quantity': quantity}
             )
             if not created:
+                # comprobar que no se exceda el stock
+                if product.stock < quantity:
+                    return Response({'error': 'Stock insuficiente'}, status=400)
                 item.quantity += quantity
                 item.save()
+
+            # Reducir stock del producto
+            product.stock -= quantity
+            product.save()
+
             return Response(CartItemSerializer(item).data, status=201)
         return Response(serializer.errors, status=400)
 
-    #Borrar articulo del carrito
+    # Borrar artículo del carrito
     def delete(self, request, pk=None):
         if not pk:
             return Response({'error': 'Debes indicar el ID del item'}, status=400)
@@ -137,7 +158,14 @@ class CartAPI(APIView):
             if item.quantity > n:
                 item.quantity -= n
                 item.save()
+                # devolver stock al producto
+                item.product.stock += n
+                item.product.save()
                 return Response(status=204)
+
+        # si se borra entero, devolver todo el stock
+        item.product.stock += item.quantity
+        item.product.save()
         item.delete()
         return Response(status=204)
 
@@ -185,18 +213,19 @@ class OrderAPI(APIView):
         return Response(OrderSerializer(order).data, status=201)
     
     #Cambiar estado del pedido
-    def patch(self, request, pk):
-        try:
-            order = Order.objects.get(id=pk, user=request.user)
-        except Order.DoesNotExist:
-            return Response({'error': 'Pedido no encontrado'}, status=404)
-        
-        new_status = request.data.get('status')
-        if new_status not in ['pendiente', 'aceptado', 'cancelado', 'enviado']:
-            return Response({'error': 'Estado no válido'}, status=400)
-        
-        order.status = new_status
-        order.save()
-        return Response(OrderSerializer(order).data, status=200)
+def patch(self, request, pk):
+    try:
+        order = Order.objects.get(id=pk, user=request.user)
+    except Order.DoesNotExist:
+        return Response({'error': 'Pedido no encontrado'}, status=404)
+    
+    new_status = request.data.get('status')
 
+    valid_statuses = dict(Order.STATUS_CHOICES).keys()
+    if new_status not in valid_statuses:
+        return Response({'error': 'Estado no válido'}, status=400)
+
+    order.status = new_status
+    order.save()
+    return Response(OrderSerializer(order).data, status=200)
 
