@@ -1,11 +1,11 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom"; // 👈 importamos useNavigate
+import { Link, useNavigate } from "react-router-dom"; 
 import { useAuth } from "../contexts/AuthContext";
 import { FaShoppingCart, FaBox } from "react-icons/fa"; 
 
 export default function Navbar() {
   const { user, cart, logout } = useAuth();
-  const navigate = useNavigate(); // 👈 inicializamos navigate
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();        // cerrar sesión
@@ -55,7 +55,7 @@ export default function Navbar() {
         {/* Login / Logout */}
         {user ? (
           <button
-            onClick={handleLogout} // 👈 usamos la función que redirige
+            onClick={handleLogout}
             className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded transition"
           >
             Cerrar sesión

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
-import { useNavigate } from "react-router-dom"; // 👈 importar navigate
+import { useNavigate } from "react-router-dom"; 
 
 // Para Google
 import { GoogleLogin } from "@react-oauth/google";
@@ -11,28 +11,28 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const navigate = useNavigate(); // 👈 inicializar navigate
+  const navigate = useNavigate(); 
 
-  // 🔑 Login clásico con username/password
+  // Login clásico con username/password
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
       const res = await api.post("/token/", { username, password });
       loginWithTokens(res.data.access, res.data.refresh, { username });
-      navigate("/"); // 👈 redirigir al inicio
+      navigate("/"); 
     } catch (err) {
       setError("Usuario o contraseña incorrectos");
     }
   };
 
-  // 🔑 Login con Google
+  //Login con Google
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       const res = await api.post("/inicio/", {
         id_token: credentialResponse.credential,
       });
       loginWithTokens(res.data.access, res.data.refresh, res.data.user);
-      navigate("/"); // 👈 redirigir al inicio
+      navigate("/"); 
     } catch (err) {
       setError("Error al iniciar sesión con Google");
     }

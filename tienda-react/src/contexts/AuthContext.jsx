@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { jwtDecode } from "jwt-decode"; // 👈 recuerda usar export nombrado
+import { jwtDecode } from "jwt-decode"; 
 import api from "../services/api";
 
 export const AuthContext = createContext();
@@ -27,14 +27,14 @@ export function AuthProvider({ children }) {
     localStorage.setItem("cart", JSON.stringify(cart));
   }, [cart]);
 
-  // 🔑 Login con tokens (desde backend)
+  // Login con tokens (desde backend)
   const loginWithTokens = (accessToken, refreshToken, userObj) => {
     setAccess(accessToken);
     setRefresh(refreshToken);
     setUser(userObj || (accessToken ? jwtDecode(accessToken) : null));
   };
 
-  // 🔑 Logout
+  // Logout
   const logout = () => {
     setAccess(null);
     setRefresh(null);
@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
     localStorage.clear();
   };
 
-  // 🛒 Carrito local
+  // Carrito local
   const addToCartLocal = (product, qty = 1) => {
     setCart((prev) => {
       const idx = prev.findIndex((i) => i.product.id === product.id);
