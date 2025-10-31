@@ -20,8 +20,8 @@ class APITestCase(TestCase):
         self.client.force_authenticate(user=self.user)
         
         # Crear productos de prueba
-        self.product1 = Product.objects.create(name='Producto 1', price=10)
-        self.product2 = Product.objects.create(name='Producto 2', price=20)
+        self.product1 = Product.objects.create(name='Producto 1', price=10, stock=10)
+        self.product2 = Product.objects.create(name='Producto 2', price=20, stock=10)
 
     
     def test_add_to_cart(self):
